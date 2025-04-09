@@ -3,15 +3,15 @@
 # ========== NHẬP THÔNG TIN TỪ NGƯỜI DÙNG ==========
 read -p "🔌 Nhập IP Proxy: " PROXY_IP
 read -p "🎯 Nhập Port Proxy: " PROXY_PORT
-read -p "👤 Nhập Username SOCKS5: " PROXY_USER
-read -p "🔐 Nhập Password SOCKS5: " PROXY_PASS
+read -p "👤 Nhập Username HTTP (để trống nếu không có): " PROXY_USER
+read -p "🔐 Nhập Password HTTP (để trống nếu không có): " PROXY_PASS
 read -p "🌐 Nhập tên giao diện VPN (tun0/wg0): " VPN_IFACE
 
 read -p "📬 Nhập Telegram Bot Token: " TG_TOKEN
 read -p "📨 Nhập Telegram Chat ID: " TG_CHAT_ID
 
-CHECK_SCRIPT="/root/check-proxy.sh"
-CRON_JOB="*/5 * * * * $CHECK_SCRIPT >> /var/log/check-proxy.log 2>&1"
+CHECK_SCRIPT="/root/check-http-proxy.sh"
+CRON_JOB="*/5 * * * * $CHECK_SCRIPT >> /var/log/check-http-proxy.log 2>&1"
 
 # ========== HÀM GỬI TELEGRAM ==========
 send_alert() {
@@ -24,7 +24,7 @@ send_alert() {
 echo "[+] Cài redsocks & curl..."
 apt update && apt install -y redsocks curl
 
-echo "[+] Tạo file cấu hình redsocks..."
+echo "[+] Tạo file cấu hình redsocks (HTTP proxy)..."
 cat > /etc/redsocks.conf <<EOF
 base {
   log_debug = off;
@@ -40,11 +40,17 @@ redsocks {
   ip = $PROXY_IP;
   port = $PROXY_PORT;
 
-  type = socks5;
+  type = http;
+EOF
+
+if [[ -n "$PROXY_USER" && -n "$PROXY_PASS" ]]; then
+cat >> /etc/redsocks.conf <<EOF
   login = "$PROXY_USER";
   password = "$PROXY_PASS";
-}
 EOF
+fi
+
+echo "}" >> /etc/redsocks.conf
 
 echo "[+] Bật IP forwarding..."
 echo 1 > /proc/sys/net/ipv4/ip_forward
@@ -66,7 +72,7 @@ if [[ "$IP_NOW" == "$PROXY_IP" ]]; then
   echo "[✅] Proxy hoạt động đúng!"
 else
   echo "[❌] Proxy lỗi hoặc IP không khớp!"
-  send_alert "🚨 *Cảnh báo từ VPS*\nProxy SOCKS5 có thể bị lỗi!\nIP hiện tại: \`$IP_NOW\`\nKhông trùng với IP proxy: \`$PROXY_IP\`"
+  send_alert "🚨 *Cảnh báo từ VPS*\nProxy HTTP có thể bị lỗi!\nIP hiện tại: \`$IP_NOW\`\nKhông trùng với IP proxy: \`$PROXY_IP\`"
 fi
 
 echo "[+] Tạo script kiểm tra proxy định kỳ tại $CHECK_SCRIPT..."
@@ -85,7 +91,7 @@ send_alert() {
 
 IP_NOW=\$(curl -s --max-time 10 https://ipinfo.io/ip)
 if [[ "\$IP_NOW" != "\$PROXY_IP" ]]; then
-  send_alert "🚨 *Cảnh báo định kỳ*\nProxy SOCKS5 có thể lỗi!\nIP hiện tại: \\\`\$IP_NOW\\\`\nKhông khớp với proxy: \\\`\$PROXY_IP\\\`"
+  send_alert "🚨 *Cảnh báo định kỳ*\nProxy HTTP có thể lỗi!\nIP hiện tại: \\\`\$IP_NOW\\\`\nKhông khớp với proxy: \\\`\$PROXY_IP\\\`"
 fi
 EOF
 
@@ -94,4 +100,4 @@ chmod +x "$CHECK_SCRIPT"
 echo "[+] Thêm cron job kiểm tra mỗi 5 phút..."
 (crontab -l 2>/dev/null; echo "$CRON_JOB") | sort -u | crontab -
 
-echo "✅ Hoàn tất cài đặt proxy + theo dõi định kỳ!"
+echo "✅ Hoàn tất cài đặt Proxy HTTP + giám sát định kỳ!"
